@@ -1,0 +1,180 @@
+version: "3.9"
+
+x-python-service: &python-service
+  build:
+    context: .
+    dockerfile: docker/base-python.Dockerfile
+  environment: &common-env
+    KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    POSTGRES_HOST: postgres
+    POSTGRES_PORT: 5432
+    POSTGRES_DB: social_feed
+    POSTGRES_USER: feed_user
+    POSTGRES_PASSWORD: dev-password
+    REDIS_HOST: redis
+    REDIS_PORT: 6379
+    LOG_LEVEL: INFO
+    OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    kafka:
+      condition: service_healthy
+  networks:
+    - sfr-network
+  restart: unless-stopped
+
+services:
+  # --- Application Services ---
+  api-gateway:
+    <<: *python-service
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      <<: *common-env
+      GATEWAY_PORT: 8000
+      FEED_SERVICE_URL: http://feed-service:8001
+      USER_PROFILE_URL: http://user-profile:8003
+
+  feed-service:
+    <<: *python-service
+    build:
+      context: .
+      dockerfile: services/feed-service/Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      <<: *common-env
+      FEED_SERVICE_PORT: 8001
+      RANKING_ENGINE_URL: http://ranking-engine:8002
+      USER_PROFILE_URL: http://user-profile:8003
+      CONTENT_INGESTION_URL: http://content-ingestion:8004
+
+  ranking-engine:
+    <<: *python-service
+    build:
+      context: .
+      dockerfile: services/ranking-engine/Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      <<: *common-env
+      RANKING_ENGINE_PORT: 8002
+      RANKING_MODEL_PATH: /models/xgboost_v1.json
+
+  user-profile:
+    <<: *python-service
+    build:
+      context: .
+      dockerfile: services/user-profile/Dockerfile
+    ports:
+      - "8003:8003"
+    environment:
+      <<: *common-env
+      USER_PROFILE_PORT: 8003
+
+  content-ingestion:
+    <<: *python-service
+    build:
+      context: .
+      dockerfile: services/content-ingestion/Dockerfile
+    ports:
+      - "8004:8004"
+    environment:
+      <<: *common-env
+      CONTENT_INGESTION_PORT: 8004
+
+  # --- Infrastructure ---
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: social_feed
+      POSTGRES_USER: feed_user
+      POSTGRES_PASSWORD: dev-password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U feed_user -d social_feed"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sfr-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - sfr-network
+
+  kafka:
+    image: bitnami/kafka:3.7
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_CFG_NODE_ID: 0
+      KAFKA_CFG_PROCESS_ROLES: controller,broker
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 0@kafka:9093
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    networks:
+      - sfr-network
+
+  # --- Observability ---
+  jaeger:
+    image: jaegertracing/all-in-one:1.55
+    ports:
+      - "16686:16686"  # UI
+      - "4317:4317"    # OTLP gRPC
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    networks:
+      - sfr-network
+
+  prometheus:
+    image: prom/prometheus:v2.50.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - sfr-network
+
+  grafana:
+    image: grafana/grafana:10.3.1
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    networks:
+      - sfr-network
+
+volumes:
+  postgres_data:
+
+networks:
+  sfr-network:
+    driver: bridge
