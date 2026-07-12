@@ -1,11 +1,9 @@
 """Structured JSON logging and OpenTelemetry trace setup."""
+
 import logging
 import os
 import sys
-from datetime import datetime, timezone
 from typing import Any
-
-from pythonjsonlogger import jsonlogger
 
 
 def setup_logging(
@@ -17,11 +15,20 @@ def setup_logging(
     logger.setLevel(getattr(logging, level.upper(), logging.INFO))
 
     handler = logging.StreamHandler(sys.stdout)
-    formatter = jsonlogger.JsonFormatter(
-        fmt="%(asctime)s %(name)s %(levelname)s %(message)s",
-        rename_fields={"asctime": "timestamp", "levelname": "level"},
-        datefmt="%Y-%m-%dT%H:%M:%S",
-    )
+    formatter: logging.Formatter
+    try:
+        from pythonjsonlogger import jsonlogger
+
+        formatter = jsonlogger.JsonFormatter(
+            fmt="%(asctime)s %(name)s %(levelname)s %(message)s",
+            rename_fields={"asctime": "timestamp", "levelname": "level"},
+            datefmt="%Y-%m-%dT%H:%M:%S",
+        )
+    except ImportError:
+        formatter = logging.Formatter(
+            fmt="%(asctime)s %(name)s %(levelname)s %(message)s",
+            datefmt="%Y-%m-%dT%H:%M:%S",
+        )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     return logger

@@ -1,6 +1,7 @@
 """Unit tests for the circuit breaker."""
-import pytest
+
 from datetime import timedelta
+
 from services.shared.src.events.kafka_client import CircuitBreaker, CircuitState
 
 
