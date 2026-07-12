@@ -1,4 +1,8 @@
-.PHONY: setup dev test test-unit test-integration test-e2e test-coverage lint build deploy-dev seed clean
+.PHONY: setup dev test test-unit test-integration test-e2e test-coverage test-load test-load-smoke test-load-docker lint build deploy-dev seed clean
+
+# Load test configuration (override: make test-load BASE_URL=... TOKEN=...)
+BASE_URL ?= http://localhost:8000
+TOKEN ?= dev-token
 
 # --- Setup ---
 setup:
@@ -42,6 +46,18 @@ test-service:
 test-coverage:
 	python -m pytest services/ --cov=services --cov-report=html --cov-report=term-missing
 	@echo "Coverage report: htmlcov/index.html"
+
+# --- Load Testing (see tests/load/README.md) ---
+test-load:
+	k6 run -e BASE_URL=$(BASE_URL) -e TOKEN=$(TOKEN) tests/load/feed_load_test.js
+
+test-load-smoke:
+	k6 run -e BASE_URL=$(BASE_URL) -e TOKEN=$(TOKEN) -e SMOKE=true tests/load/feed_load_test.js
+
+test-load-docker:
+	docker run --rm -i --network host --user $$(id -u):$$(id -g) \
+		-v $(PWD)/tests/load:/scripts -w /scripts \
+		-e BASE_URL=$(BASE_URL) -e TOKEN=$(TOKEN) grafana/k6 run feed_load_test.js
 
 # --- Code Quality ---
 lint:
