@@ -1,0 +1,80 @@
+# Isolated test infrastructure for the integration test suite (Issue #16).
+#
+# Runs PostgreSQL, Redis, and Kafka on non-default host ports so the stack
+# never collides with the development stack in docker-compose.yml. Postgres
+# is pre-seeded with deterministic data (fixed UUIDs, fixed timestamps) from
+# tests/integration/fixtures/seed_test_data.sql.
+#
+# Usage:
+#   docker compose -f docker-compose.test.yml up -d --wait
+#   PYTHONPATH=. pytest tests/integration -q
+#   docker compose -f docker-compose.test.yml down -v
+#
+# Container-dependent tests are marked @pytest.mark.integration and skip
+# automatically when this stack is not running.
+
+name: sfr-test
+
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: social_feed_test
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test-password
+    ports:
+      - "55432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    volumes:
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./tests/integration/fixtures/seed_test_data.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d social_feed_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    networks:
+      - sfr-test-network
+
+  redis-test:
+    image: redis:7-alpine
+    ports:
+      - "56379:6379"
+    command: redis-server --save "" --appendonly no --maxmemory 128mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    networks:
+      - sfr-test-network
+
+  kafka-test:
+    image: apache/kafka:3.7.2
+    ports:
+      - "19092:19092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: controller,broker
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka-test:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:19092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-test:9092,EXTERNAL://localhost:19092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+    networks:
+      - sfr-test-network
+
+networks:
+  sfr-test-network:
+    driver: bridge
