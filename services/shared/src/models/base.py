@@ -1,13 +1,13 @@
 """Shared Pydantic base models used across all services."""
-from datetime import datetime
-from enum import Enum
-from typing import Optional
+
+from datetime import UTC, datetime
+from enum import StrEnum
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
 
-class ContentType(str, Enum):
+class ContentType(StrEnum):
     TEXT = "text"
     IMAGE = "image"
     VIDEO = "video"
@@ -15,7 +15,7 @@ class ContentType(str, Enum):
     POLL = "poll"
 
 
-class EngagementType(str, Enum):
+class EngagementType(StrEnum):
     LIKE = "like"
     COMMENT = "comment"
     SHARE = "share"
@@ -26,7 +26,7 @@ class EngagementType(str, Enum):
 
 class BaseEvent(BaseModel):
     event_id: UUID = Field(default_factory=uuid4)
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     source_service: str
 
 
@@ -34,8 +34,8 @@ class PostEvent(BaseEvent):
     post_id: UUID
     author_id: UUID
     content_type: ContentType
-    text: Optional[str] = None
-    media_url: Optional[str] = None
+    text: str | None = None
+    media_url: str | None = None
     hashtags: list[str] = Field(default_factory=list)
 
 
@@ -44,7 +44,7 @@ class EngagementEvent(BaseEvent):
     post_id: UUID
     engagement_type: EngagementType
     value: float = 1.0
-    dwell_time_ms: Optional[int] = None
+    dwell_time_ms: int | None = None
 
 
 class FeedServedEvent(BaseEvent):
@@ -67,4 +67,4 @@ class UserPreferences(BaseModel):
 class PaginationCursor(BaseModel):
     offset: int = 0
     limit: int = 25
-    cursor_token: Optional[str] = None
+    cursor_token: str | None = None
