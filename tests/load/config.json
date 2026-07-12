@@ -1,0 +1,35 @@
+{
+  "baseUrl": "http://localhost:8000",
+  "feed": {
+    "path": "/api/v1/feed",
+    "limit": 25,
+    "warmUserPoolSize": 50,
+    "warmTrafficShare": 0.8
+  },
+  "slo": {
+    "p50CachedMs": 30,
+    "p99ColdMs": 80,
+    "maxErrorRate": 0.001,
+    "minThroughputRps": 1000
+  },
+  "scenarios": {
+    "rampUp": {
+      "startVus": 0,
+      "targetVus": 1000,
+      "rampDuration": "2m",
+      "holdDuration": "1m"
+    },
+    "steadyState": {
+      "rate": 1100,
+      "duration": "5m",
+      "preAllocatedVus": 1000,
+      "maxVus": 1200
+    },
+    "spike": {
+      "targetVus": 1000,
+      "spikeUpDuration": "10s",
+      "holdDuration": "30s",
+      "spikeDownDuration": "10s"
+    }
+  }
+}
