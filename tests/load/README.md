@@ -47,7 +47,8 @@ without touching the script.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `BASE_URL` | `http://localhost:8000` (from `config.json`) | Base URL of the API gateway |
-| `TOKEN` | *(empty)* | JWT bearer token, sent as `Authorization: Bearer <TOKEN>`. Required — the feed route enforces JWT auth; without it every request is a 401 and the error-rate threshold fails. |
+| `TOKENS` | *(empty)* | Comma-separated JWT bearer tokens for distinct test users. The gateway derives the feed owner from the token (client-supplied `user_id` was removed as an IDOR fix), so identity is varied via tokens: the first `warmUserPoolSize` tokens form the warm (cache-hit) pool, the rest are the cold population. Required — without a token every request is a 401 and the error-rate threshold fails. |
+| `TOKEN` | *(empty)* | Single-token shorthand for `TOKENS`. With one token all requests are warm-tagged and cold thresholds pass vacuously. |
 | `SMOKE` | *(unset)* | Any non-empty value shrinks all phases to a ~40 s, low-VU functional sanity run |
 
 ## How to run

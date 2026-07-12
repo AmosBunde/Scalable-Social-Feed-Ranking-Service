@@ -8,10 +8,12 @@
  *   3. spike        - sharp ramp to 1000 VUs to observe behaviour under a
  *                     sudden burst, then fast ramp-down.
  *
- * Traffic model: a deterministic pool of "warm" user IDs is requested
- * repeatedly (cache hits), while a configurable share of requests uses a
- * random user ID ("cold", cache miss). Requests are tagged cache:warm /
- * cache:cold so SLO thresholds can target each population separately.
+ * Traffic model: the gateway derives the feed owner from the verified JWT
+ * (client-supplied user_id was removed as an IDOR fix), so user identity is
+ * varied via tokens. A small "warm" token pool is requested repeatedly
+ * (cache hits) while the remaining tokens form the "cold" population (cache
+ * misses). Requests are tagged cache:warm / cache:cold so SLO thresholds can
+ * target each population separately.
  *
  * SLO thresholds (from tests/load/config.json):
  *   - p50 latency (cached/warm)  < 30ms
@@ -21,7 +23,11 @@
  *
  * Environment variables:
  *   BASE_URL - target base URL (default: config.baseUrl, http://localhost:8000)
- *   TOKEN    - JWT bearer token; sent as "Authorization: Bearer <TOKEN>"
+ *   TOKENS   - comma-separated JWT bearer tokens for distinct test users.
+ *              The first warmUserPoolSize tokens form the warm pool; the rest
+ *              are the cold population. With a single token every request is
+ *              warm-tagged (cold thresholds pass vacuously).
+ *   TOKEN    - single-token shorthand for TOKENS
  *   SMOKE    - if set (any non-empty value), shrinks all scenarios to a few
  *              VUs / seconds for a quick functional sanity check.
  *
@@ -37,7 +43,10 @@ import { Rate } from 'k6/metrics';
 const config = JSON.parse(open('./config.json'));
 
 const BASE_URL = __ENV.BASE_URL || config.baseUrl;
-const TOKEN = __ENV.TOKEN || '';
+const TOKENS = (__ENV.TOKENS || __ENV.TOKEN || '')
+  .split(',')
+  .map((t) => t.trim())
+  .filter(Boolean);
 const SMOKE = Boolean(__ENV.SMOKE);
 
 const slo = config.slo;
@@ -46,20 +55,12 @@ const feedCfg = config.feed;
 // Custom rate: 1 = request failed or returned a bad payload.
 const feedErrors = new Rate('feed_errors');
 
-// Deterministic warm pool, identical in every VU, so repeated requests for
-// the same user IDs actually exercise the cache-hit path server-side.
-const warmUserIds = Array.from({ length: feedCfg.warmUserPoolSize }, (_, i) =>
-  `00000000-0000-4000-8000-${String(i + 1).padStart(12, '0')}`
-);
-
-/** RFC 4122-ish v4 UUID (no external deps so the script is fully offline). */
-function uuidv4() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-}
+// Identity comes from the JWT: the first warmUserPoolSize tokens are hit
+// repeatedly so the same feeds actually exercise the cache-hit path
+// server-side; the remaining tokens are the cache-miss population.
+const warmCount = Math.max(1, Math.min(feedCfg.warmUserPoolSize, TOKENS.length));
+const warmTokens = TOKENS.slice(0, warmCount);
+const coldTokens = TOKENS.slice(warmCount);
 
 function buildScenarios() {
   if (SMOKE) {
@@ -178,22 +179,22 @@ export const options = {
   },
 };
 
-const requestParams = (cacheTag) => ({
+const requestParams = (token, cacheTag) => ({
   headers: Object.assign(
     { 'Content-Type': 'application/json' },
-    TOKEN ? { Authorization: `Bearer ${TOKEN}` } : {}
+    token ? { Authorization: `Bearer ${token}` } : {}
   ),
   tags: { cache: cacheTag, endpoint: 'feed' },
 });
 
 export default function () {
-  const warm = Math.random() < feedCfg.warmTrafficShare;
-  const userId = warm
-    ? warmUserIds[(Math.random() * warmUserIds.length) | 0]
-    : uuidv4();
+  const warm =
+    coldTokens.length === 0 || Math.random() < feedCfg.warmTrafficShare;
+  const pool = warm ? warmTokens : coldTokens;
+  const token = pool[(Math.random() * pool.length) | 0];
 
-  const url = `${BASE_URL}${feedCfg.path}?user_id=${userId}&limit=${feedCfg.limit}`;
-  const res = http.get(url, requestParams(warm ? 'warm' : 'cold'));
+  const url = `${BASE_URL}${feedCfg.path}?limit=${feedCfg.limit}`;
+  const res = http.get(url, requestParams(token, warm ? 'warm' : 'cold'));
 
   const ok = check(res, {
     'status is 200': (r) => r.status === 200,
