@@ -2,6 +2,7 @@
 
 import time
 from collections import defaultdict
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
 from fastapi import Request, Response
@@ -42,7 +43,9 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
             )
         )
 
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         if request.url.path in ("/health", "/ready"):
             return await call_next(request)
 

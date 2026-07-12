@@ -3,6 +3,7 @@
 import logging
 import os
 from contextlib import asynccontextmanager
+from typing import Any
 
 import numpy as np
 from fastapi import FastAPI, HTTPException
@@ -25,7 +26,7 @@ class RankingModel:
     """XGBoost model wrapper with A/B variant support."""
 
     def __init__(self):
-        self._models: dict[str, object] = {}
+        self._models: dict[str, Any] = {}
         self._default_version = "v1"
 
     def load_model(self, version: str, path: str) -> None:
@@ -51,7 +52,7 @@ class RankingModel:
             feature_names = sorted(features[0].keys()) if features else []
             matrix = np.array([[f.get(name, 0.0) for name in feature_names] for f in features])
             dmat = xgb.DMatrix(matrix, feature_names=feature_names)
-            return model.predict(dmat).tolist()
+            return [float(score) for score in model.predict(dmat)]
         except Exception as exc:
             logger.error("Model prediction failed: %s", exc)
             return self._heuristic_score(features)

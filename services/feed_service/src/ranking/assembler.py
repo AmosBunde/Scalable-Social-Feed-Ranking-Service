@@ -61,6 +61,6 @@ class FeedAssembler:
             return 0
         try:
             payload = json.loads(base64.urlsafe_b64decode(cursor.encode()))
-            return payload.get("offset", 0)
+            return int(payload.get("offset", 0))
         except Exception:
             return 0

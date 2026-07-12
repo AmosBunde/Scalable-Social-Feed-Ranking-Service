@@ -68,7 +68,7 @@ class FeedScorer:
     def _author_affinity(author_id: UUID, preferences: dict) -> float:
         """Affinity based on past interactions. Returns 0.0-1.0."""
         affinities = preferences.get("author_affinities", {})
-        return affinities.get(str(author_id), 0.5)
+        return float(affinities.get(str(author_id), 0.5))
 
     @staticmethod
     def _engagement_velocity(post: CandidatePost) -> float:
@@ -89,7 +89,7 @@ class FeedScorer:
     @staticmethod
     def _content_type_preference(content_type: str, preferences: dict) -> float:
         weights = preferences.get("content_weights", {})
-        return weights.get(content_type, 0.5)
+        return float(weights.get(content_type, 0.5))
 
     @staticmethod
     def _social_proof(post: CandidatePost) -> float:

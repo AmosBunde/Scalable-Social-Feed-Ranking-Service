@@ -15,6 +15,7 @@ def setup_logging(
     logger.setLevel(getattr(logging, level.upper(), logging.INFO))
 
     handler = logging.StreamHandler(sys.stdout)
+    formatter: logging.Formatter
     try:
         from pythonjsonlogger import jsonlogger
 

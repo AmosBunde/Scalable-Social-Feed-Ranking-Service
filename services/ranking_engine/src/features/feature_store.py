@@ -27,7 +27,7 @@ class FeatureStore:
         if self._redis:
             cached = await self._redis.get(key)
             if cached:
-                return cached
+                return {name: float(value) for name, value in cached.items()}
 
         return self._cache.get(key, self._default_features())
 

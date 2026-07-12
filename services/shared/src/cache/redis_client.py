@@ -2,8 +2,9 @@
 
 import json
 import logging
+from collections.abc import Awaitable
 from datetime import timedelta
-from typing import Any
+from typing import Any, cast
 
 from services.shared.src.events.kafka_client import CircuitBreaker
 
@@ -35,7 +36,8 @@ try:
 
         async def ping(self) -> bool:
             try:
-                return await self._client.ping()
+                # redis-py types ping() as Awaitable[bool] | bool; the async client awaits
+                return await cast(Awaitable[bool], self._client.ping())
             except Exception:
                 return False
 
@@ -48,7 +50,8 @@ try:
                 self._circuit.record_success()
                 if raw is None:
                     return None
-                return json.loads(raw)
+                data: dict[str, Any] = json.loads(raw)
+                return data
             except Exception as exc:
                 self._circuit.record_failure()
                 logger.error("Redis get failed for %s: %s", key, exc)
@@ -87,7 +90,7 @@ try:
 
         async def increment(self, key: str, amount: int = 1) -> int | None:
             try:
-                return await self._client.incrby(key, amount)
+                return int(await self._client.incrby(key, amount))
             except Exception as exc:
                 logger.error("Redis increment failed for %s: %s", key, exc)
                 return None
