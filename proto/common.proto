@@ -1,0 +1,55 @@
+// common.proto
+//
+// Shared enums used across all socialfeed.v1 service definitions.
+// Mirrors the shared Pydantic models in services/shared/src/models/base.py
+// (ContentType, EngagementType) so that REST payloads and gRPC messages
+// stay semantically identical during the migration.
+//
+// Conventions used throughout socialfeed.v1:
+//   - UUIDs (post_id, user_id, event_id, ...) are encoded as canonical
+//     lowercase hyphenated strings, e.g. "8f14e45f-ceea-467f-a0e6-8f14e45fceea".
+//   - Timestamps use google.protobuf.Timestamp (UTC).
+//   - Pagination cursors are opaque base64 strings; clients must not parse them.
+
+syntax = "proto3";
+
+package socialfeed.v1;
+
+option java_multiple_files = true;
+option java_package = "com.socialfeed.v1";
+
+// Type of content a post carries.
+// Mirrors services/shared/src/models/base.py::ContentType.
+enum ContentType {
+  // Default value; treated as unknown and rejected by ingestion.
+  CONTENT_TYPE_UNSPECIFIED = 0;
+  // Plain text post.
+  CONTENT_TYPE_TEXT = 1;
+  // Image post (media_url points at the image).
+  CONTENT_TYPE_IMAGE = 2;
+  // Video post (media_url points at the video manifest).
+  CONTENT_TYPE_VIDEO = 3;
+  // External link share.
+  CONTENT_TYPE_LINK = 4;
+  // Poll post.
+  CONTENT_TYPE_POLL = 5;
+}
+
+// Kind of engagement a user performed on a post.
+// Mirrors services/shared/src/models/base.py::EngagementType.
+enum EngagementType {
+  // Default value; treated as unknown and rejected by ingestion.
+  ENGAGEMENT_TYPE_UNSPECIFIED = 0;
+  // User liked the post.
+  ENGAGEMENT_TYPE_LIKE = 1;
+  // User commented on the post.
+  ENGAGEMENT_TYPE_COMMENT = 2;
+  // User re-shared the post.
+  ENGAGEMENT_TYPE_SHARE = 3;
+  // User followed the post author.
+  ENGAGEMENT_TYPE_FOLLOW = 4;
+  // User dwelled on the post (see EngagementEvent.dwell_time_ms).
+  ENGAGEMENT_TYPE_DWELL = 5;
+  // User clicked through the post (link, media, profile).
+  ENGAGEMENT_TYPE_CLICK = 6;
+}
