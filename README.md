@@ -202,6 +202,21 @@ The Kubernetes manifests in `k8s/base` reference exactly these names, so
 `kubectl apply -k` works with no image edits. To deploy a specific
 version, pin the `<sha>` tag in an overlay.
 
+New GHCR packages are **private** by default: either make them public
+(package settings on GitHub) or give the cluster an image pull secret:
+
+```bash
+kubectl create secret docker-registry ghcr-pull \
+  --docker-server=ghcr.io --docker-username=<user> \
+  --docker-password=<PAT with read:packages> -n social-feed
+# then add `imagePullSecrets: [{name: ghcr-pull}]` to the pod specs
+```
+
+Continuous deploy to a dev cluster is off by default (the job skips).
+To enable it, set the repository variable `DEPLOY_TO_DEV=true` and add
+a `KUBE_CONFIG` secret (base64-encoded kubeconfig); every main push
+then applies `k8s/overlays/dev` after images publish.
+
 ### Option B: AWS EKS with Terraform
 
 ```bash
