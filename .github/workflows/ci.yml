@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+# GITHUB_TOKEN needs packages:write to push images to GHCR
+permissions:
+  contents: read
+  packages: write
+
 env:
   PYTHON_VERSION: "3.12"
   REGISTRY: ghcr.io
