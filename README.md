@@ -202,6 +202,11 @@ The Kubernetes manifests in `k8s/base` reference exactly these names, so
 `kubectl apply -k` works with no image edits. To deploy a specific
 version, pin the `<sha>` tag in an overlay.
 
+Continuous deploy to a dev cluster is off by default (the job skips).
+To enable it, set the repository variable `DEPLOY_TO_DEV=true` and add
+a `KUBE_CONFIG` secret (base64-encoded kubeconfig); every main push
+then applies `k8s/overlays/dev` after images publish.
+
 ### Option B: AWS EKS with Terraform
 
 ```bash

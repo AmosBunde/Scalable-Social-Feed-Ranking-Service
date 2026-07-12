@@ -94,12 +94,22 @@ jobs:
     name: Deploy to Dev
     runs-on: ubuntu-latest
     needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Requires a reachable cluster: set repo variable DEPLOY_TO_DEV=true and
+    # secret KUBE_CONFIG (base64 kubeconfig). Skipped otherwise so the
+    # pipeline stays green for repos without a dev cluster.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_TO_DEV == 'true'
     environment: dev
     steps:
       - uses: actions/checkout@v4
       - name: Set up kubectl
         uses: azure/setup-kubectl@v3
+      - name: Configure cluster access
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+        run: |
+          mkdir -p ~/.kube
+          printf '%s' "$KUBE_CONFIG" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
       - name: Deploy with Kustomize
         run: |
           kubectl kustomize k8s/overlays/dev | kubectl apply -f -
