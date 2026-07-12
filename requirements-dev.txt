@@ -21,7 +21,7 @@ ruff==0.8.6
 mypy==1.13.0
 
 # gRPC stub generation (scripts/gen_protos.sh)
-grpcio-tools==1.82.1
+grpcio-tools==1.70.0
 
 # Telemetry (optional)
 opentelemetry-api==1.28.2
