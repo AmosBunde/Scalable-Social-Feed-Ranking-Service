@@ -21,7 +21,5 @@ async def post_engagement(
     token: TokenPayload = Depends(verify_token),
 ):
     if user_id != token.user_id:
-        raise HTTPException(
-            status_code=403, detail="Cannot record engagement for another user"
-        )
+        raise HTTPException(status_code=403, detail="Cannot record engagement for another user")
     return {"status": "accepted"}
