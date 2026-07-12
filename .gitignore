@@ -1,10 +1,24 @@
 # Python
 __pycache__/
 *.py[cod]
+*.egg-info/
 .venv/
+venv/
+
+# Test / coverage
+.coverage
+.coverage.*
+htmlcov/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# Environment
+.env
+
+# IDE
+.idea/
+.vscode/
 
 # Generated gRPC stubs (regenerate with scripts/gen_protos.sh or buf generate)
 gen/
