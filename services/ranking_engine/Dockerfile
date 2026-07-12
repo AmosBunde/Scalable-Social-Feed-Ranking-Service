@@ -3,7 +3,7 @@ FROM python:3.12-slim
 WORKDIR /app
 
 COPY services/shared /app/services/shared
-COPY services/ranking-engine /app/services/ranking_engine
+COPY services/ranking_engine /app/services/ranking_engine
 
 RUN pip install --no-cache-dir \
     fastapi[standard]==0.115.* \

@@ -1,4 +1,3 @@
-version: "3.9"
 
 x-python-service: &python-service
   build:
@@ -32,12 +31,16 @@ services:
     <<: *python-service
     build:
       context: .
-      dockerfile: services/api-gateway/Dockerfile
+      dockerfile: services/api_gateway/Dockerfile
     ports:
-      - "8000:8000"
+      - "${HOST_GATEWAY_PORT:-8000}:8000"
     environment:
       <<: *common-env
       GATEWAY_PORT: 8000
+      # dev-token bypass only activates in development (see jwt_handler.py)
+      ENVIRONMENT: development
+      JWT_SECRET: dev-secret-change-in-production-0
+      CORS_ORIGINS: http://localhost:3000
       FEED_SERVICE_URL: http://feed-service:8001
       USER_PROFILE_URL: http://user-profile:8003
 
@@ -45,9 +48,9 @@ services:
     <<: *python-service
     build:
       context: .
-      dockerfile: services/feed-service/Dockerfile
+      dockerfile: services/feed_service/Dockerfile
     ports:
-      - "8001:8001"
+      - "${HOST_FEED_PORT:-8001}:8001"
     environment:
       <<: *common-env
       FEED_SERVICE_PORT: 8001
@@ -59,9 +62,9 @@ services:
     <<: *python-service
     build:
       context: .
-      dockerfile: services/ranking-engine/Dockerfile
+      dockerfile: services/ranking_engine/Dockerfile
     ports:
-      - "8002:8002"
+      - "${HOST_RANKING_PORT:-8002}:8002"
     environment:
       <<: *common-env
       RANKING_ENGINE_PORT: 8002
@@ -71,9 +74,9 @@ services:
     <<: *python-service
     build:
       context: .
-      dockerfile: services/user-profile/Dockerfile
+      dockerfile: services/user_profile/Dockerfile
     ports:
-      - "8003:8003"
+      - "${HOST_PROFILE_PORT:-8003}:8003"
     environment:
       <<: *common-env
       USER_PROFILE_PORT: 8003
@@ -82,9 +85,9 @@ services:
     <<: *python-service
     build:
       context: .
-      dockerfile: services/content-ingestion/Dockerfile
+      dockerfile: services/content_ingestion/Dockerfile
     ports:
-      - "8004:8004"
+      - "${HOST_INGESTION_PORT:-8004}:8004"
     environment:
       <<: *common-env
       CONTENT_INGESTION_PORT: 8004
@@ -97,7 +100,7 @@ services:
       POSTGRES_USER: feed_user
       POSTGRES_PASSWORD: dev-password
     ports:
-      - "5432:5432"
+      - "${HOST_POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
@@ -112,7 +115,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "${HOST_REDIS_PORT:-6379}:6379"
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -123,20 +126,23 @@ services:
       - sfr-network
 
   kafka:
-    image: bitnami/kafka:3.7
+    image: apache/kafka:3.7.2
     ports:
-      - "9092:9092"
+      - "${HOST_KAFKA_PORT:-9092}:19092"
     environment:
-      KAFKA_CFG_NODE_ID: 0
-      KAFKA_CFG_PROCESS_ROLES: controller,broker
-      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 0@kafka:9093
-      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
-      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: controller,broker
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:19092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:${HOST_KAFKA_PORT:-9092}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
     healthcheck:
-      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
       interval: 10s
       timeout: 10s
       retries: 5
@@ -147,8 +153,8 @@ services:
   jaeger:
     image: jaegertracing/all-in-one:1.55
     ports:
-      - "16686:16686"  # UI
-      - "4317:4317"    # OTLP gRPC
+      - "${HOST_JAEGER_UI_PORT:-16686}:16686"  # UI
+      - "${HOST_OTLP_PORT:-4317}:4317"    # OTLP gRPC
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
     networks:
@@ -157,7 +163,7 @@ services:
   prometheus:
     image: prom/prometheus:v2.50.0
     ports:
-      - "9090:9090"
+      - "${HOST_PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml
     networks:
@@ -166,7 +172,7 @@ services:
   grafana:
     image: grafana/grafana:10.3.1
     ports:
-      - "3000:3000"
+      - "${HOST_GRAFANA_PORT:-3000}:3000"
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin
     networks:

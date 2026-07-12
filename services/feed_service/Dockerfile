@@ -3,7 +3,7 @@ FROM python:3.12-slim
 WORKDIR /app
 
 COPY services/shared /app/services/shared
-COPY services/feed-service /app/services/feed_service
+COPY services/feed_service /app/services/feed_service
 
 RUN pip install --no-cache-dir \
     fastapi[standard]==0.115.* \
