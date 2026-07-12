@@ -1,0 +1,16 @@
+# Namespace-wide STRICT mTLS for social-feed (issue #18).
+#
+# With STRICT mode, sidecars only accept mutual-TLS traffic: any plaintext
+# request from a pod without an Istio sidecar is rejected. Kubelet
+# liveness/readiness probes keep working because Istio rewrites HTTP probes
+# to the pilot-agent (rewriteAppHTTPProbers is on by default).
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: social-feed
+  labels:
+    app.kubernetes.io/part-of: social-feed
+spec:
+  mtls:
+    mode: STRICT

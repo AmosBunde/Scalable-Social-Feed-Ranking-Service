@@ -1,0 +1,85 @@
+# Canary / traffic-split example for ranking-engine.
+#
+# NOT applied by default -- it is intentionally excluded from
+# kustomization.yaml because the VirtualService below *replaces* the
+# default `ranking-engine` VirtualService (same name, subset-weighted
+# routing). See "Canary rollout for ranking-engine" in README.md for the
+# enable/promote/rollback procedure.
+#
+# Prerequisite: label the stable pods so the `stable` subset in
+# destination-rules.yaml matches them:
+#
+#   kubectl patch deployment ranking-engine -n social-feed --type merge \
+#     -p '{"spec":{"template":{"metadata":{"labels":{"version":"stable"}}}}}'
+---
+# Canary deployment: same `app: ranking-engine` label (so it joins the
+# ranking-engine Service) plus `version: canary` for subset routing.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ranking-engine-canary
+  namespace: social-feed
+  labels:
+    app: ranking-engine
+    version: canary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ranking-engine
+      version: canary
+  template:
+    metadata:
+      labels:
+        app: ranking-engine
+        version: canary
+    spec:
+      serviceAccountName: ranking-engine
+      containers:
+        - name: ranking-engine
+          # Pin the release candidate tag being canaried.
+          image: ghcr.io/amosbunde/scalable-social-feed-ranking-service/ranking-engine:canary
+          ports:
+            - containerPort: 8002
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+---
+# Weighted traffic split: 90% stable / 10% canary. Subsets are defined in
+# the ranking-engine DestinationRule (destination-rules.yaml). Shift the
+# weights (90/10 -> 50/50 -> 0/100) to promote, or set canary weight to 0
+# (or re-apply virtual-services.yaml) to roll back instantly.
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: ranking-engine
+  namespace: social-feed
+  labels:
+    app.kubernetes.io/part-of: social-feed
+spec:
+  hosts:
+    - ranking-engine.social-feed.svc.cluster.local
+  http:
+    - name: ranking-engine-canary-split
+      route:
+        - destination:
+            host: ranking-engine.social-feed.svc.cluster.local
+            subset: stable
+            port:
+              number: 8002
+          weight: 90
+        - destination:
+            host: ranking-engine.social-feed.svc.cluster.local
+            subset: canary
+            port:
+              number: 8002
+          weight: 10
+      timeout: 3s
+      retries:
+        attempts: 3
+        perTryTimeout: 1s
+        retryOn: connect-failure,refused-stream,reset,5xx
