@@ -1,0 +1,24 @@
+# Istio ingress Gateway for the social-feed namespace.
+#
+# All external traffic enters the mesh through the shared istio-ingressgateway
+# (istio-system) and is routed to the api-gateway service by the
+# `api-gateway` VirtualService in virtual-services.yaml.
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: social-feed-gateway
+  namespace: social-feed
+  labels:
+    app.kubernetes.io/part-of: social-feed
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        # Replace with the real public hostname (e.g. feed.example.com)
+        # once DNS/TLS are provisioned. "*" keeps dev clusters working.
+        - "*"

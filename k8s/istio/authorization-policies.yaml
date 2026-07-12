@@ -1,0 +1,139 @@
+# AuthorizationPolicies for the social-feed namespace.
+#
+# Model: default-deny, then explicit ALLOW rules that mirror the actual
+# call graph (see docker-compose.yml / k8s/base/deployments.yaml):
+#
+#   istio-ingressgateway -> api-gateway:8000
+#   api-gateway          -> feed-service:8001, user-profile:8003
+#   feed-service         -> ranking-engine:8002, user-profile:8003,
+#                           content-ingestion:8004
+#
+# NOTE: workloads currently run under the namespace `default`
+# ServiceAccount, so caller identity is scoped per-namespace rather than
+# per-service. When dedicated ServiceAccounts are introduced, tighten the
+# `principals` lists below (e.g. cluster.local/ns/social-feed/sa/api-gateway).
+---
+# 1. Default deny: with no rules, nothing in the namespace accepts traffic
+#    unless another ALLOW policy matches.
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: default-deny
+  namespace: social-feed
+  labels:
+    app.kubernetes.io/part-of: social-feed
+spec: {}
+---
+# 2. Only the Istio ingress gateway may call api-gateway.
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: api-gateway-allow-ingress
+  namespace: social-feed
+  labels:
+    app.kubernetes.io/part-of: social-feed
+spec:
+  selector:
+    matchLabels:
+      app: api-gateway
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - cluster.local/ns/istio-system/sa/istio-ingressgateway
+      to:
+        - operation:
+            ports: ["8000"]
+---
+# 3. feed-service accepts calls from within the mesh namespace
+#    (api-gateway is its only intended caller).
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: feed-service-allow
+  namespace: social-feed
+  labels:
+    app.kubernetes.io/part-of: social-feed
+spec:
+  selector:
+    matchLabels:
+      app: feed-service
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            namespaces: ["social-feed"]
+      to:
+        - operation:
+            ports: ["8001"]
+            methods: ["GET", "POST"]
+---
+# 4. ranking-engine accepts calls from within the mesh namespace
+#    (feed-service is its only intended caller).
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: ranking-engine-allow
+  namespace: social-feed
+  labels:
+    app.kubernetes.io/part-of: social-feed
+spec:
+  selector:
+    matchLabels:
+      app: ranking-engine
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            namespaces: ["social-feed"]
+      to:
+        - operation:
+            ports: ["8002"]
+            methods: ["GET", "POST"]
+---
+# 5. user-profile accepts calls from within the mesh namespace
+#    (api-gateway and feed-service).
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: user-profile-allow
+  namespace: social-feed
+  labels:
+    app.kubernetes.io/part-of: social-feed
+spec:
+  selector:
+    matchLabels:
+      app: user-profile
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            namespaces: ["social-feed"]
+      to:
+        - operation:
+            ports: ["8003"]
+            methods: ["GET", "POST", "PUT"]
+---
+# 6. content-ingestion accepts calls from within the mesh namespace
+#    (feed-service).
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: content-ingestion-allow
+  namespace: social-feed
+  labels:
+    app.kubernetes.io/part-of: social-feed
+spec:
+  selector:
+    matchLabels:
+      app: content-ingestion
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            namespaces: ["social-feed"]
+      to:
+        - operation:
+            ports: ["8004"]
+            methods: ["GET", "POST"]

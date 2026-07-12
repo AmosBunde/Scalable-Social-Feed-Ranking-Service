@@ -1,0 +1,130 @@
+# VirtualServices for every service in the social-feed mesh.
+#
+# Conventions:
+#   - Every internal route carries a retry policy of 3 attempts
+#     (issue #18 acceptance criteria).
+#   - Timeouts: 3s for ranking-engine, 5s for feed-service (issue #18),
+#     10s at the edge (api-gateway), 3s for user-profile,
+#     5s for content-ingestion.
+#   - retryOn covers transient transport and 5xx failures only, so
+#     non-idempotent application errors are not blindly replayed.
+---
+# Edge routing: external traffic entering via social-feed-gateway,
+# plus in-mesh calls addressed to api-gateway.
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: api-gateway
+  namespace: social-feed
+  labels:
+    app.kubernetes.io/part-of: social-feed
+spec:
+  hosts:
+    - "*"
+  gateways:
+    - social-feed-gateway
+  http:
+    - name: api-gateway-default
+      route:
+        - destination:
+            host: api-gateway.social-feed.svc.cluster.local
+            port:
+              number: 8000
+      timeout: 10s
+      retries:
+        attempts: 3
+        perTryTimeout: 3s
+        retryOn: connect-failure,refused-stream,reset,5xx
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: feed-service
+  namespace: social-feed
+  labels:
+    app.kubernetes.io/part-of: social-feed
+spec:
+  hosts:
+    - feed-service.social-feed.svc.cluster.local
+  http:
+    - name: feed-service-default
+      route:
+        - destination:
+            host: feed-service.social-feed.svc.cluster.local
+            port:
+              number: 8001
+      timeout: 5s
+      retries:
+        attempts: 3
+        perTryTimeout: 2s
+        retryOn: connect-failure,refused-stream,reset,5xx
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: ranking-engine
+  namespace: social-feed
+  labels:
+    app.kubernetes.io/part-of: social-feed
+spec:
+  hosts:
+    - ranking-engine.social-feed.svc.cluster.local
+  http:
+    - name: ranking-engine-default
+      route:
+        - destination:
+            host: ranking-engine.social-feed.svc.cluster.local
+            port:
+              number: 8002
+      # Ranking sits on the hot path of feed assembly; keep it tight.
+      timeout: 3s
+      retries:
+        attempts: 3
+        perTryTimeout: 1s
+        retryOn: connect-failure,refused-stream,reset,5xx
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: user-profile
+  namespace: social-feed
+  labels:
+    app.kubernetes.io/part-of: social-feed
+spec:
+  hosts:
+    - user-profile.social-feed.svc.cluster.local
+  http:
+    - name: user-profile-default
+      route:
+        - destination:
+            host: user-profile.social-feed.svc.cluster.local
+            port:
+              number: 8003
+      timeout: 3s
+      retries:
+        attempts: 3
+        perTryTimeout: 1s
+        retryOn: connect-failure,refused-stream,reset,5xx
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: content-ingestion
+  namespace: social-feed
+  labels:
+    app.kubernetes.io/part-of: social-feed
+spec:
+  hosts:
+    - content-ingestion.social-feed.svc.cluster.local
+  http:
+    - name: content-ingestion-default
+      route:
+        - destination:
+            host: content-ingestion.social-feed.svc.cluster.local
+            port:
+              number: 8004
+      timeout: 5s
+      retries:
+        attempts: 3
+        perTryTimeout: 2s
+        retryOn: connect-failure,refused-stream,reset,5xx

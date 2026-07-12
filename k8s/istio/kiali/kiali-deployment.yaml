@@ -1,0 +1,185 @@
+# Kiali mesh-observability dashboard (issue #18).
+#
+# Minimal standalone deployment in istio-system (the Kiali operator / Helm
+# chart is the production-grade alternative). Access it locally with:
+#
+#   kubectl port-forward svc/kiali -n istio-system 20001:20001
+#   open http://localhost:20001/kiali
+#
+# Auth is `anonymous` because access is via port-forward only; switch to
+# `token` or OpenID before exposing it any other way.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kiali
+  namespace: istio-system
+  labels:
+    app: kiali
+    app.kubernetes.io/part-of: social-feed
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kiali-viewer
+  labels:
+    app: kiali
+    app.kubernetes.io/part-of: social-feed
+rules:
+  - apiGroups: [""]
+    resources:
+      - configmaps
+      - endpoints
+      - pods
+      - pods/log
+      - replicationcontrollers
+      - services
+      - namespaces
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources:
+      - daemonsets
+      - deployments
+      - replicasets
+      - statefulsets
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources:
+      - cronjobs
+      - jobs
+    verbs: ["get", "list", "watch"]
+  - apiGroups:
+      - networking.istio.io
+      - security.istio.io
+      - telemetry.istio.io
+      - extensions.istio.io
+      - gateway.networking.k8s.io
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps.openshift.io", "project.openshift.io", "route.openshift.io"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kiali-viewer
+  labels:
+    app: kiali
+    app.kubernetes.io/part-of: social-feed
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kiali-viewer
+subjects:
+  - kind: ServiceAccount
+    name: kiali
+    namespace: istio-system
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kiali
+  namespace: istio-system
+  labels:
+    app: kiali
+    app.kubernetes.io/part-of: social-feed
+data:
+  config.yaml: |
+    auth:
+      strategy: anonymous
+    deployment:
+      cluster_wide_access: true
+    server:
+      port: 20001
+      web_root: /kiali
+    external_services:
+      prometheus:
+        # Matches the Prometheus deployed for mesh/app telemetry
+        # (see infrastructure/telemetry). Adjust if it lives elsewhere.
+        url: http://prometheus.istio-system:9090
+      grafana:
+        enabled: false
+      tracing:
+        enabled: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kiali
+  namespace: istio-system
+  labels:
+    app: kiali
+    app.kubernetes.io/part-of: social-feed
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kiali
+  template:
+    metadata:
+      labels:
+        app: kiali
+      annotations:
+        # Kiali observes the mesh; it does not need to be part of it.
+        sidecar.istio.io/inject: "false"
+    spec:
+      serviceAccountName: kiali
+      containers:
+        - name: kiali
+          image: quay.io/kiali/kiali:v1.89
+          command:
+            - /opt/kiali/kiali
+            - -config
+            - /kiali-configuration/config.yaml
+          ports:
+            - name: api-port
+              containerPort: 20001
+          env:
+            - name: ACTIVE_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          volumeMounts:
+            - name: kiali-configuration
+              mountPath: /kiali-configuration
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /kiali/healthz
+              port: 20001
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          livenessProbe:
+            httpGet:
+              path: /kiali/healthz
+              port: 20001
+            initialDelaySeconds: 5
+            periodSeconds: 30
+      volumes:
+        - name: kiali-configuration
+          configMap:
+            name: kiali
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kiali
+  namespace: istio-system
+  labels:
+    app: kiali
+    app.kubernetes.io/part-of: social-feed
+spec:
+  selector:
+    app: kiali
+  ports:
+    - name: http
+      port: 20001
+      targetPort: 20001
+  type: ClusterIP
