@@ -8,10 +8,9 @@
 #   feed-service         -> ranking-engine:8002, user-profile:8003,
 #                           content-ingestion:8004
 #
-# NOTE: workloads currently run under the namespace `default`
-# ServiceAccount, so caller identity is scoped per-namespace rather than
-# per-service. When dedicated ServiceAccounts are introduced, tighten the
-# `principals` lists below (e.g. cluster.local/ns/social-feed/sa/api-gateway).
+# Each workload runs under its own ServiceAccount (service-accounts.yaml,
+# wired up via serviceAccountName in k8s/base/deployments.yaml), so every
+# rule authorizes callers by mTLS principal rather than by namespace.
 ---
 # 1. Default deny: with no rules, nothing in the namespace accepts traffic
 #    unless another ALLOW policy matches.
@@ -47,7 +46,7 @@ spec:
             ports: ["8000"]
 ---
 # 3. feed-service accepts calls from within the mesh namespace
-#    (api-gateway is its only intended caller).
+#    principal (its only intended caller).
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
 metadata:
@@ -63,14 +62,14 @@ spec:
   rules:
     - from:
         - source:
-            namespaces: ["social-feed"]
+            principals:
+              - cluster.local/ns/social-feed/sa/api-gateway
       to:
         - operation:
             ports: ["8001"]
             methods: ["GET", "POST"]
 ---
-# 4. ranking-engine accepts calls from within the mesh namespace
-#    (feed-service is its only intended caller).
+# 4. ranking-engine accepts calls from the feed-service principal only.
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
 metadata:
@@ -86,14 +85,14 @@ spec:
   rules:
     - from:
         - source:
-            namespaces: ["social-feed"]
+            principals:
+              - cluster.local/ns/social-feed/sa/feed-service
       to:
         - operation:
             ports: ["8002"]
             methods: ["GET", "POST"]
 ---
-# 5. user-profile accepts calls from within the mesh namespace
-#    (api-gateway and feed-service).
+# 5. user-profile accepts calls from api-gateway and feed-service.
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
 metadata:
@@ -109,14 +108,15 @@ spec:
   rules:
     - from:
         - source:
-            namespaces: ["social-feed"]
+            principals:
+              - cluster.local/ns/social-feed/sa/api-gateway
+              - cluster.local/ns/social-feed/sa/feed-service
       to:
         - operation:
             ports: ["8003"]
             methods: ["GET", "POST", "PUT"]
 ---
-# 6. content-ingestion accepts calls from within the mesh namespace
-#    (feed-service).
+# 6. content-ingestion accepts calls from the feed-service principal only.
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
 metadata:
@@ -132,7 +132,8 @@ spec:
   rules:
     - from:
         - source:
-            namespaces: ["social-feed"]
+            principals:
+              - cluster.local/ns/social-feed/sa/feed-service
       to:
         - operation:
             ports: ["8004"]

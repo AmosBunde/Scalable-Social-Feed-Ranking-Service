@@ -5,11 +5,12 @@ namespace (issue #18). Layout:
 
 | File | Contents |
 | --- | --- |
-| `gateway.yaml` | Ingress `Gateway` (port 80) fronting `api-gateway` |
+| `gateway.yaml` | Ingress `Gateway` (port 80, explicit host `feed.example.com`) fronting `api-gateway` |
 | `virtual-services.yaml` | One `VirtualService` per service: retries (3 attempts) and timeouts (3s ranking-engine, 5s feed-service, 3s user-profile, 5s content-ingestion, 10s edge) |
 | `destination-rules.yaml` | One `DestinationRule` per service: `ISTIO_MUTUAL` TLS, connection pools, outlier detection (circuit breaking), `stable`/`canary` subsets for ranking-engine |
 | `peer-authentication.yaml` | Namespace-wide `STRICT` mTLS |
-| `authorization-policies.yaml` | Default-deny plus per-service ALLOW rules mirroring the real call graph |
+| `authorization-policies.yaml` | Default-deny plus per-service ALLOW rules keyed on mTLS principals |
+| `service-accounts.yaml` | Dedicated ServiceAccount per workload (SPIFFE identity) |
 | `ranking-engine-canary.yaml` | Opt-in canary deployment + 90/10 traffic split (not applied by default) |
 | `kiali/kiali-deployment.yaml` | Kiali dashboard for mesh observability |
 
@@ -80,10 +81,11 @@ api-gateway          -> feed-service:8001, user-profile:8003
 feed-service         -> ranking-engine:8002, user-profile:8003, content-ingestion:8004
 ```
 
-Workloads currently share the namespace `default` ServiceAccount, so the
-internal rules are namespace-scoped. Once per-service ServiceAccounts
-exist, tighten each rule to `principals` (e.g.
-`cluster.local/ns/social-feed/sa/api-gateway`).
+Every workload runs under a dedicated ServiceAccount
+(`service-accounts.yaml`; `k8s/base/deployments.yaml` sets
+`serviceAccountName`), so each rule authorizes callers by mTLS principal
+(e.g. `cluster.local/ns/social-feed/sa/api-gateway`) — a compromised pod
+elsewhere in the namespace gets no implicit access.
 
 ## Canary rollout for ranking-engine
 
@@ -118,11 +120,12 @@ weighted 90/10 split across the `stable`/`canary` subsets defined in
 
 ## Kiali dashboard
 
-Kiali runs in `istio-system` with anonymous auth, intended for
-port-forward access only:
+Kiali runs in `istio-system` with `token` auth. Port-forward, then log
+in with a ServiceAccount token:
 
 ```bash
 kubectl port-forward svc/kiali -n istio-system 20001:20001
+kubectl create token kiali-viewer -n istio-system   # paste into the login form
 ```
 
 Then open <http://localhost:20001/kiali>. The Graph view shows live

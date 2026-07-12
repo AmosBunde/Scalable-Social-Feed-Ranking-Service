@@ -34,6 +34,7 @@ spec:
         app: ranking-engine
         version: canary
     spec:
+      serviceAccountName: ranking-engine
       containers:
         - name: ranking-engine
           # Pin the release candidate tag being canaried.

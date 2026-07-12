@@ -6,8 +6,9 @@
 #   kubectl port-forward svc/kiali -n istio-system 20001:20001
 #   open http://localhost:20001/kiali
 #
-# Auth is `anonymous` because access is via port-forward only; switch to
-# `token` or OpenID before exposing it any other way.
+# Auth is `token`: log in with a ServiceAccount token, e.g.
+#   kubectl create token kiali-viewer -n istio-system
+# Switch to OpenID before exposing the dashboard beyond port-forward.
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -87,7 +88,7 @@ metadata:
 data:
   config.yaml: |
     auth:
-      strategy: anonymous
+      strategy: token
     deployment:
       cluster_wide_access: true
     server:
