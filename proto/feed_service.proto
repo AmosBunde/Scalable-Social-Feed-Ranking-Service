@@ -1,0 +1,99 @@
+// feed_service.proto
+//
+// gRPC surface for the Feed Service (services/feed-service).
+// Mirrors the REST contract served today by GET /feed/{user_id} and the
+// Pydantic models in services/feed-service/src/models/feed.py
+// (RankedPost, FeedResponse) and services/shared/src/models/base.py
+// (PaginationCursor).
+
+syntax = "proto3";
+
+package socialfeed.v1;
+
+import "common.proto";
+import "google/protobuf/timestamp.proto";
+
+option java_multiple_files = true;
+option java_package = "com.socialfeed.v1";
+
+// Request for a ranked, personalized feed page.
+message FeedRequest {
+  // UUID of the user whose feed is being requested. Required.
+  string user_id = 1;
+  // Opaque pagination cursor returned by a previous FeedResponse
+  // (next_cursor). Empty for the first page.
+  string cursor = 2;
+  // Maximum number of posts to return. Defaults to 25 server-side;
+  // capped at 100. Mirrors PaginationCursor.limit.
+  int32 limit = 3;
+}
+
+// A single post after candidate generation, scoring, and diversification.
+// Mirrors services/feed-service/src/models/feed.py::RankedPost.
+message RankedPost {
+  // UUID of the post.
+  string post_id = 1;
+  // UUID of the post author.
+  string author_id = 2;
+  // Content type of the post (text, image, video, link, poll).
+  ContentType content_type = 3;
+  // Final ranking score produced by the ranking engine (higher is better).
+  double score = 4;
+  // Zero-based position of the post within the assembled feed page.
+  int32 position = 5;
+  // Truncated text body for preview rendering. Empty for media-only posts.
+  string text_preview = 6;
+  // URL of the primary media asset, if any.
+  string media_url = 7;
+  // Denormalized engagement counters at serve time.
+  int64 like_count = 8;
+  int64 comment_count = 9;
+  int64 share_count = 10;
+  // When the post was created (UTC).
+  google.protobuf.Timestamp created_at = 11;
+}
+
+// A page of ranked posts plus cursor state for the next page.
+// Mirrors services/feed-service/src/models/feed.py::FeedResponse.
+message FeedResponse {
+  // UUID of the user the feed was generated for (echoes FeedRequest.user_id).
+  string user_id = 1;
+  // Ranked posts in display order.
+  repeated RankedPost posts = 2;
+  // Opaque cursor for fetching the next page. Empty when the feed
+  // is exhausted.
+  string next_cursor = 3;
+  // Total number of candidate posts considered before ranking and
+  // diversification (useful for observability and recall tuning).
+  int32 total_candidates = 4;
+  // Number of posts in this page (== posts.size(); kept for parity with
+  // the REST payload).
+  int32 page_size = 5;
+}
+
+// Request to invalidate a user's cached feed (e.g. after an engagement
+// spike or a new follow). Mirrors the Redis feed-cache invalidation path
+// in services/feed-service/src/cache/feed_cache.py.
+message InvalidateFeedRequest {
+  // UUID of the user whose cached feed should be dropped.
+  string user_id = 1;
+  // Human-readable reason for the invalidation (spike, follow, manual).
+  string reason = 2;
+}
+
+// Acknowledgement of a feed cache invalidation.
+message InvalidateFeedResponse {
+  // True if a cached feed existed and was removed.
+  bool invalidated = 1;
+}
+
+// Feed assembly service: candidate generation -> scoring -> diversification.
+// gRPC replacement for the REST endpoints exposed by
+// services/feed-service/src/api/feed_handler.py.
+service FeedService {
+  // Returns one ranked feed page for a user with cursor pagination.
+  rpc GetFeed(FeedRequest) returns (FeedResponse);
+
+  // Drops the cached feed for a user so the next GetFeed recomputes it.
+  rpc InvalidateFeed(InvalidateFeedRequest) returns (InvalidateFeedResponse);
+}

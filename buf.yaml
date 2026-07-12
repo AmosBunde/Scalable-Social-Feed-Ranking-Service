@@ -1,0 +1,23 @@
+# Buf configuration for the socialfeed.v1 proto module.
+# Lint/format/breaking-change checks: `buf lint`, `buf format -d`, `buf breaking`.
+version: v2
+modules:
+  - path: proto
+lint:
+  use:
+    - STANDARD
+  except:
+    # Protos live flat under proto/ (repo convention) rather than
+    # proto/socialfeed/v1/, so package != directory path.
+    - PACKAGE_DIRECTORY_MATCH
+    # Issue #20 mandates the message names FeedRequest/FeedResponse and
+    # ScoreRequest/ScoreResponse, which don't follow buf's
+    # <RpcName>Request/<RpcName>Response convention. Event messages
+    # (PostEvent, EngagementEvent) are also reused as RPC inputs because
+    # they are the canonical Kafka payloads.
+    - RPC_REQUEST_STANDARD_NAME
+    - RPC_RESPONSE_STANDARD_NAME
+    - RPC_REQUEST_RESPONSE_UNIQUE
+breaking:
+  use:
+    - FILE

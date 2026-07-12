@@ -1,0 +1,97 @@
+// content_ingestion.proto
+//
+// gRPC surface for the Content Ingestion Service (services/content-ingestion).
+// Mirrors the Kafka event payloads defined in
+// services/shared/src/models/base.py (PostEvent, EngagementEvent) that are
+// consumed by services/content-ingestion/src/consumers/engagement_consumer.py.
+// The streaming RPCs are the gRPC migration path for producers that today
+// publish JSON events to the "posts" and "engagements" Kafka topics.
+
+syntax = "proto3";
+
+package socialfeed.v1;
+
+import "common.proto";
+import "google/protobuf/timestamp.proto";
+
+option java_multiple_files = true;
+option java_package = "com.socialfeed.v1";
+
+// A newly created (or edited) post entering the pipeline.
+// Mirrors services/shared/src/models/base.py::PostEvent.
+message PostEvent {
+  // UUID uniquely identifying this event (idempotency key for
+  // at-least-once delivery).
+  string event_id = 1;
+  // When the event was produced (UTC). Mirrors BaseEvent.timestamp.
+  google.protobuf.Timestamp occurred_at = 2;
+  // Name of the service that emitted the event, e.g. "api-gateway".
+  string source_service = 3;
+  // UUID of the post.
+  string post_id = 4;
+  // UUID of the post author.
+  string author_id = 5;
+  // Content type of the post.
+  ContentType content_type = 6;
+  // Full text body. Empty for media-only posts.
+  string text = 7;
+  // URL of the primary media asset, if any.
+  string media_url = 8;
+  // Hashtags extracted from the post body, without the leading '#'.
+  repeated string hashtags = 9;
+}
+
+// A single user engagement with a post.
+// Mirrors services/shared/src/models/base.py::EngagementEvent; feeds the
+// windowed counters (1h/24h/7d) in the ranking feature store and the
+// spike-detection feed invalidation path.
+message EngagementEvent {
+  // UUID uniquely identifying this event (idempotency key).
+  string event_id = 1;
+  // When the engagement happened (UTC). Mirrors BaseEvent.timestamp.
+  google.protobuf.Timestamp occurred_at = 2;
+  // Name of the service that emitted the event, e.g. "api-gateway".
+  string source_service = 3;
+  // UUID of the user who engaged.
+  string user_id = 4;
+  // UUID of the post engaged with.
+  string post_id = 5;
+  // Kind of engagement (like, comment, share, follow, dwell, click).
+  EngagementType engagement_type = 6;
+  // Engagement weight; 1.0 for discrete actions, scaled for dwell.
+  double value = 7;
+  // Dwell duration in milliseconds; only set when engagement_type is
+  // ENGAGEMENT_TYPE_DWELL.
+  int64 dwell_time_ms = 8;
+}
+
+// Acknowledgement for a single published post event.
+message PublishPostResponse {
+  // Echoes PostEvent.event_id.
+  string event_id = 1;
+  // True if the event was accepted into the pipeline.
+  bool accepted = 2;
+  // Rejection reason when accepted is false (e.g. "unknown content_type").
+  string error = 3;
+}
+
+// Summary returned once an engagement stream is closed by the client.
+message StreamEngagementsResponse {
+  // Number of events accepted into the pipeline.
+  int64 events_accepted = 1;
+  // Number of events rejected (malformed, unknown enum values, duplicates).
+  int64 events_rejected = 2;
+}
+
+// Content and engagement ingestion pipeline.
+// gRPC migration path for the Kafka producers feeding
+// services/content-ingestion.
+service ContentIngestionService {
+  // Publishes a single post event into the ingestion pipeline.
+  rpc PublishPost(PostEvent) returns (PublishPostResponse);
+
+  // Client-streaming firehose of engagement events. Producers keep one
+  // long-lived stream open and receive an aggregate summary when they
+  // close it; per-event errors are counted rather than failing the stream.
+  rpc StreamEngagements(stream EngagementEvent) returns (StreamEngagementsResponse);
+}

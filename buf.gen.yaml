@@ -1,0 +1,11 @@
+# Buf code generation for Python: `buf generate`.
+# Output lands in gen/python/ (not committed; see scripts/gen_protos.sh
+# for the grpcio-tools equivalent that needs no buf install).
+version: v2
+plugins:
+  - remote: buf.build/protocolbuffers/python
+    out: gen/python
+  - remote: buf.build/protocolbuffers/pyi
+    out: gen/python
+  - remote: buf.build/grpc/python
+    out: gen/python

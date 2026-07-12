@@ -1,0 +1,107 @@
+// user_profile.proto
+//
+// gRPC surface for the User Profile Service (services/user-profile).
+// Mirrors the REST contract served today by GET /users/{user_id},
+// GET /users/{user_id}/graph and GET /users/{user_id}/following, and the
+// Pydantic models in services/user-profile/src/main.py (UserProfile,
+// SocialGraph) plus services/shared/src/models/base.py (UserPreferences).
+
+syntax = "proto3";
+
+package socialfeed.v1;
+
+option java_multiple_files = true;
+option java_package = "com.socialfeed.v1";
+
+// A user's profile and feed-personalization preferences.
+// Mirrors services/user-profile/src/main.py::UserProfile.
+message UserProfile {
+  // UUID of the user.
+  string user_id = 1;
+  // Unique handle, e.g. "amos".
+  string username = 2;
+  // Display name shown in the UI.
+  string display_name = 3;
+  // Free-form bio. Empty if unset.
+  string bio = 4;
+  // Denormalized follower count.
+  int64 follower_count = 5;
+  // Denormalized following count.
+  int64 following_count = 6;
+  // Per-content-type ranking multipliers keyed by content type name
+  // ("text", "image", "video", "link", "poll"), e.g. {"video": 1.1}.
+  // Mirrors UserPreferences.content_weights.
+  map<string, double> content_weights = 7;
+  // UUIDs of authors whose posts must be filtered out of this user's feed.
+  repeated string muted_author_ids = 8;
+}
+
+// Follow relationships for a user.
+// Mirrors services/user-profile/src/main.py::SocialGraph.
+message SocialGraph {
+  // UUID of the user this graph belongs to.
+  string user_id = 1;
+  // UUIDs of users this user follows (candidate-generation seed set).
+  repeated string following_ids = 2;
+  // UUIDs of users who follow this user.
+  repeated string follower_ids = 3;
+  // UUIDs of mutual connections (follows in both directions); used for
+  // the mutual_engagement ranking feature.
+  repeated string mutual_connection_ids = 4;
+}
+
+// Request for a single user's profile.
+message GetProfileRequest {
+  // UUID of the user to fetch.
+  string user_id = 1;
+}
+
+// Request for a user's social graph.
+message GetSocialGraphRequest {
+  // UUID of the user whose graph to fetch.
+  string user_id = 1;
+}
+
+// Request for only the following list (hot path for candidate generation).
+message GetFollowingRequest {
+  // UUID of the user whose following list to fetch.
+  string user_id = 1;
+}
+
+// Following list response.
+message GetFollowingResponse {
+  // UUIDs of users the requested user follows.
+  repeated string following_ids = 1;
+}
+
+// Request to record a follow edge between two users.
+message FollowRequest {
+  // UUID of the user performing the follow.
+  string follower_id = 1;
+  // UUID of the user being followed.
+  string followee_id = 2;
+}
+
+// Acknowledgement of a follow edge write.
+message FollowResponse {
+  // True if the edge was created; false if it already existed.
+  bool created = 1;
+}
+
+// User data and social graph service.
+// gRPC replacement for the REST endpoints in services/user-profile/src/main.py.
+service UserProfileService {
+  // Fetches a user's profile. NOT_FOUND if the user does not exist.
+  rpc GetProfile(GetProfileRequest) returns (UserProfile);
+
+  // Fetches a user's full social graph. Returns an empty graph (not an
+  // error) for users with no recorded edges, matching REST behavior.
+  rpc GetSocialGraph(GetSocialGraphRequest) returns (SocialGraph);
+
+  // Fetches only the following IDs; the feed service's candidate
+  // generation hot path.
+  rpc GetFollowing(GetFollowingRequest) returns (GetFollowingResponse);
+
+  // Records a follow edge and updates both users' graphs.
+  rpc Follow(FollowRequest) returns (FollowResponse);
+}

@@ -1,0 +1,60 @@
+// ranking_engine.proto
+//
+// gRPC surface for the Ranking Engine (services/ranking-engine).
+// Mirrors the REST contract served today by POST /score and the Pydantic
+// models in services/ranking-engine/src/main.py (ScoringRequest,
+// ScoringResponse). Feature names match the vectors produced by
+// services/feed-service/src/ranking/scorer.py and the windowed
+// aggregations in services/ranking-engine/src/features/feature_store.py
+// (e.g. author_affinity, engagement_velocity, recency_decay,
+// content_type_pref, social_proof, post_quality, like_1h, comment_24h).
+
+syntax = "proto3";
+
+package socialfeed.v1;
+
+option java_multiple_files = true;
+option java_package = "com.socialfeed.v1";
+
+// Feature vector for a single candidate post.
+message FeatureVector {
+  // UUID of the candidate post the features describe.
+  string post_id = 1;
+  // Named feature values, e.g. {"author_affinity": 0.8, "recency_decay": 0.4}.
+  // Unknown feature names are ignored by the model; missing features
+  // default to 0.0.
+  map<string, double> features = 2;
+}
+
+// Batch scoring request for a set of candidate posts.
+message ScoreRequest {
+  // Candidates to score. Order is significant: ScoreResponse.scores is
+  // parallel to this list.
+  repeated FeatureVector candidates = 1;
+  // Model variant to use (A/B testing), e.g. "v1". Empty selects the
+  // server default.
+  string model_version = 2;
+}
+
+// Scores for one ScoreRequest.
+message ScoreResponse {
+  // Relevance scores, parallel to ScoreRequest.candidates (scores[i]
+  // belongs to candidates[i]). Higher is better.
+  repeated double scores = 1;
+  // Model version that actually produced the scores (resolved default
+  // or requested variant).
+  string model_version = 2;
+}
+
+// Candidate scoring service backed by the XGBoost ranking model.
+// gRPC replacement for POST /score in services/ranking-engine/src/main.py.
+service RankingService {
+  // Scores a batch of candidate feature vectors in one round trip.
+  rpc ScoreCandidates(ScoreRequest) returns (ScoreResponse);
+
+  // Bidirectional streaming variant for large candidate sets: the feed
+  // service streams chunks of candidates and receives score chunks back
+  // without buffering the whole batch. Each ScoreResponse corresponds to
+  // the ScoreRequest received in the same order.
+  rpc ScoreCandidatesStream(stream ScoreRequest) returns (stream ScoreResponse);
+}
