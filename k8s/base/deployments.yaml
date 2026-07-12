@@ -23,7 +23,7 @@ spec:
       serviceAccountName: api-gateway
       containers:
         - name: api-gateway
-          image: ghcr.io/amosbunde/scalable-social-feed-ranking-service/api-gateway:latest
+          image: ghcr.io/amosbunde/sfr-api_gateway:latest
           ports:
             - containerPort: 8000
           env:
@@ -82,7 +82,7 @@ spec:
       serviceAccountName: feed-service
       containers:
         - name: feed-service
-          image: ghcr.io/amosbunde/scalable-social-feed-ranking-service/feed-service:latest
+          image: ghcr.io/amosbunde/sfr-feed_service:latest
           ports:
             - containerPort: 8001
           resources:
@@ -128,7 +128,7 @@ spec:
       serviceAccountName: ranking-engine
       containers:
         - name: ranking-engine
-          image: ghcr.io/amosbunde/scalable-social-feed-ranking-service/ranking-engine:latest
+          image: ghcr.io/amosbunde/sfr-ranking_engine:latest
           ports:
             - containerPort: 8002
           resources:

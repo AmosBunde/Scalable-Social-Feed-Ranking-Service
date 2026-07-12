@@ -9,7 +9,7 @@ on:
 env:
   PYTHON_VERSION: "3.12"
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/sfr
+  IMAGE_PREFIX: ghcr.io/amosbunde/sfr  # image refs must be lowercase
 
 jobs:
   lint:
@@ -77,9 +77,11 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: docker/${{ matrix.service }}/Dockerfile
+          file: services/${{ matrix.service }}/Dockerfile
           push: true
-          tags: ${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:${{ github.sha }}
+          tags: |
+            ${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:latest
 
   deploy:
     name: Deploy to Dev

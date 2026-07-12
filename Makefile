@@ -1,4 +1,4 @@
-.PHONY: setup dev test test-unit test-integration test-e2e test-coverage test-load test-load-smoke test-load-docker lint build deploy-dev seed clean
+.PHONY: setup dev quickstart test test-unit test-integration test-e2e test-coverage test-load test-load-smoke test-load-docker lint build deploy-dev seed clean
 
 # Load test configuration (override: make test-load BASE_URL=... TOKEN=...)
 BASE_URL ?= http://localhost:8000
@@ -13,7 +13,25 @@ setup:
 # --- Development ---
 dev:
 	docker compose up -d
-	@echo "Services starting... Check http://localhost:8000/health"
+	@echo "Services starting... Check http://localhost:$${HOST_GATEWAY_PORT:-8000}/health"
+
+# One command from clean checkout to a running, verified stack.
+# Override host ports if taken: HOST_GATEWAY_PORT=18080 make quickstart
+quickstart:
+	docker compose up -d --build --wait
+	@echo "Verifying gateway health..."
+	@curl -sf http://localhost:$${HOST_GATEWAY_PORT:-8000}/health >/dev/null \
+		&& echo "OK: gateway healthy"
+	@curl -sf -H "Authorization: Bearer dev-token" \
+		http://localhost:$${HOST_GATEWAY_PORT:-8000}/api/v1/feed >/dev/null \
+		&& echo "OK: authenticated feed request served"
+	@echo ""
+	@echo "Stack is up:"
+	@echo "  API gateway  http://localhost:$${HOST_GATEWAY_PORT:-8000}  (Bearer dev-token)"
+	@echo "  Jaeger UI    http://localhost:$${HOST_JAEGER_UI_PORT:-16686}"
+	@echo "  Grafana      http://localhost:$${HOST_GRAFANA_PORT:-3000}  (admin/admin)"
+	@echo "  Prometheus   http://localhost:$${HOST_PROMETHEUS_PORT:-9090}"
+	@echo "Stop with: make stop"
 
 dev-logs:
 	docker compose logs -f
