@@ -56,6 +56,56 @@ jobs:
           name: coverage-report
           path: coverage.xml
 
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    env:
+      # conftest imports the real service apps as `services.*` packages
+      PYTHONPATH: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements-dev.txt
+      - name: Start test infrastructure
+        # Isolated Postgres/Redis/Kafka stack on non-default host ports
+        # (55432/56379/19092); --wait blocks until healthchecks pass.
+        run: docker compose -f docker-compose.test.yml up -d --wait
+      - name: Run integration tests
+        # -rs lists every skip in the short summary; tee keeps the output
+        # for the skip-guard below. pipefail preserves pytest's exit code.
+        run: |
+          set -o pipefail
+          pytest tests/integration -q -rs | tee integration-test-output.log
+      - name: Fail if container-backed tests were skipped
+        # The container-backed tests (@pytest.mark.integration) skip
+        # themselves when the compose stack is unreachable, which would
+        # otherwise turn an infra failure into a green job. Green must mean
+        # "ran against real containers", so:
+        #   1. assert integration-marked tests still exist (collection guard)
+        #   2. assert the run reported zero skips of any kind
+        run: |
+          marked=$(pytest tests/integration -m integration --collect-only -q 2>/dev/null | grep -c '::' || true)
+          if [ "$marked" -eq 0 ]; then
+            echo "::error::No @pytest.mark.integration tests were collected; the container-backed suite is gone or mis-marked."
+            exit 1
+          fi
+          echo "Collected $marked integration-marked tests."
+          if grep -qE '[0-9]+ skipped' integration-test-output.log; then
+            echo "::error::Integration tests were SKIPPED. The docker-compose.test.yml containers were not detected; see the -rs summary above."
+            exit 1
+          fi
+          echo "No skips detected: the suite ran against the real containers."
+      - name: Tear down test infrastructure
+        if: always()
+        run: docker compose -f docker-compose.test.yml down -v
+
   k8s-validate:
     name: Validate K8s Manifests
     runs-on: ubuntu-latest
@@ -74,7 +124,7 @@ jobs:
     permissions:
       contents: read
       packages: write  # push images to GHCR
-    needs: test
+    needs: [test, integration]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     strategy:
       matrix:
