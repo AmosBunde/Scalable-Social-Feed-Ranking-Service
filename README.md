@@ -45,8 +45,10 @@ How the tree scales, and where the current limits are:
   timeouts, circuit breaking, and a canary path for risky rollouts.
 - **Known single points to watch**: PostgreSQL is a single primary
   (add read replicas / partitioning before write volume grows), the
-  in-memory rate limiter is per-replica (move to Redis for a global
-  limit), and Kafka runs single-broker outside production overlays.
+  gateway rate limiter is Redis-backed (a single global limit across
+  replicas, degrading to a per-replica in-memory token bucket if Redis
+  is unavailable), and Kafka runs single-broker outside production
+  overlays.
 
 ## Quick Start (one command)
 
