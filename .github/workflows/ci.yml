@@ -56,6 +56,18 @@ jobs:
           name: coverage-report
           path: coverage.xml
 
+  k8s-validate:
+    name: Validate K8s Manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Render all kustomizations
+        run: |
+          for d in k8s/base k8s/overlays/dev k8s/overlays/staging k8s/overlays/prod k8s/istio; do
+            echo "--- rendering $d"
+            kubectl kustomize "$d" > /dev/null
+          done
+
   build:
     name: Build Docker Images
     runs-on: ubuntu-latest

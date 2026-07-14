@@ -5,7 +5,6 @@ kind: Kustomization
 # Apply on top of k8s/base (or an overlay):
 #   kubectl apply -k k8s/base && kubectl apply -k k8s/istio
 resources:
-  - service-accounts.yaml
   - gateway.yaml
   - virtual-services.yaml
   - destination-rules.yaml

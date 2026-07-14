@@ -10,7 +10,6 @@ namespace (issue #18). Layout:
 | `destination-rules.yaml` | One `DestinationRule` per service: `ISTIO_MUTUAL` TLS, connection pools, outlier detection (circuit breaking), `stable`/`canary` subsets for ranking-engine |
 | `peer-authentication.yaml` | Namespace-wide `STRICT` mTLS |
 | `authorization-policies.yaml` | Default-deny plus per-service ALLOW rules keyed on mTLS principals |
-| `service-accounts.yaml` | Dedicated ServiceAccount per workload (SPIFFE identity) |
 | `ranking-engine-canary.yaml` | Opt-in canary deployment + 90/10 traffic split (not applied by default) |
 | `kiali/kiali-deployment.yaml` | Kiali dashboard for mesh observability |
 
@@ -82,7 +81,7 @@ feed-service         -> ranking-engine:8002, user-profile:8003, content-ingestio
 ```
 
 Every workload runs under a dedicated ServiceAccount
-(`service-accounts.yaml`; `k8s/base/deployments.yaml` sets
+(`k8s/base/service-accounts.yaml`; the base deployments set
 `serviceAccountName`), so each rule authorizes callers by mTLS principal
 (e.g. `cluster.local/ns/social-feed/sa/api-gateway`) — a compromised pod
 elsewhere in the namespace gets no implicit access.
